@@ -1,0 +1,40 @@
+WITH games_augmented AS (
+    SELECT 
+        gd.team_abbreviation,
+        g.game_id,
+        g.season,
+        g.home_team_id,
+        g.visitor_team_id,
+        g.home_team_wins,
+        CASE 
+            WHEN g.home_team_wins = 1 THEN g.home_team_id 
+            WHEN g.home_team_wins = 0 THEN g.visitor_team_id 
+            ELSE NULL 
+        END AS winning_team_id  -- Stores the team_id of the winner
+    FROM game_details gd
+    JOIN games g ON gd.game_id = g.game_id
+),
+
+team_wins AS (
+    SELECT 
+        team_abbreviation,
+        game_id,
+        season,
+        COUNT(*) OVER (
+            PARTITION BY home_team_id
+            ORDER BY game_id
+            ROWS BETWEEN 89 PRECEDING AND CURRENT ROW
+        ) AS rolling_90_game_wins
+    FROM games_augmented
+    WHERE home_team_id = winning_team_id OR visitor_team_id = winning_team_id  -- Ensure correct matching
+)
+
+SELECT * FROM team_wins
+
+SELECT 
+    team_abbreviation,
+    MAX(rolling_90_game_wins) AS max_wins_in_90_game_stretch
+FROM team_wins
+GROUP BY team_abbreviation
+ORDER BY max_wins_in_90_game_stretch DESC
+LIMIT 1;

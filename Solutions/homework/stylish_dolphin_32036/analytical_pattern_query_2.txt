@@ -1,0 +1,72 @@
+-- CREATE TABLE player_points_dashboard AS
+
+WITH games_augmented AS (
+    SELECT 
+        gd.player_name,
+        gd.team_city,
+        COALESCE(g.season, 0) AS season,
+        COALESCE(gd.pts, 0) AS pts_scored,
+        gd.game_id,
+        g.home_team_id,
+        g.visitor_team_id,
+        g.home_team_wins,
+        gd.team_abbreviation AS player_team_abbreviation,
+        gd.team_id AS player_team_id,
+        CASE 
+            WHEN g.home_team_wins = 1 THEN g.game_id  -- Home team won
+            WHEN g.home_team_wins = 0 THEN g.game_id  -- Away team won
+            ELSE NULL 
+        END AS game_id_won  -- Track only the games that were won
+    FROM game_details gd
+    JOIN games g ON gd.game_id = g.game_id
+)
+
+SELECT 
+    player_name,
+    player_team_abbreviation AS team_abbreviation,
+    season,
+    SUM(pts_scored) AS total_points,
+    COUNT(DISTINCT CASE 
+                      WHEN player_team_id = home_team_id AND home_team_wins = 1 THEN game_id_won
+                      WHEN player_team_id = visitor_team_id AND home_team_wins = 0 THEN game_id_won
+                      ELSE NULL 
+                  END) AS total_wins,  -- Count only distinct games won
+    GROUPING(player_name) AS player_grouping,
+    GROUPING(player_team_abbreviation) AS team_grouping,
+    GROUPING(season) AS season_grouping
+FROM games_augmented
+GROUP BY 
+    GROUPING SETS (
+        (player_name, player_team_abbreviation),  -- Player and Team
+        (player_name, season),                    -- Player and Season
+        (player_team_abbreviation)                -- Team
+    )
+HAVING SUM(pts_scored) > 0  -- Remove unnecessary zero-score aggregations
+ORDER BY total_points DESC, total_wins DESC;
+
+
+SELECT * from  player_points_dashboard
+
+-- Answer questions like who scored the most points playing for one team?
+SELECT player_name, team_abbreviation, total_points
+FROM player_points_dashboard
+WHERE player_grouping = 0 AND team_grouping = 0
+ORDER BY total_points DESC
+LIMIT 1;
+
+--Answer questions like who scored the most points in one season?
+SELECT player_name, season, total_points
+FROM player_points_dashboard
+WHERE player_grouping = 0 AND season_grouping = 0
+ORDER BY total_points DESC
+LIMIT 1;
+
+--Answer questions like which team has won the most games?
+SELECT team_abbreviation, total_wins
+FROM player_points_dashboard
+WHERE team_grouping = 0
+ORDER BY total_wins DESC
+LIMIT 1;
+
+
+

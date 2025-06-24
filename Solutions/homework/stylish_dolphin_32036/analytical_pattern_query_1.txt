@@ -1,0 +1,38 @@
+INSERT INTO player_growth_accounting
+WITH yesterday AS (
+    SELECT * FROM player_growth_accounting
+    WHERE current_season = 2008
+),
+     today AS (
+         SELECT
+            player_name,
+            season as current_season,
+            COUNT(1)
+         FROM player_seasons
+         WHERE season = 2009
+         AND player_name IS NOT NULL
+         GROUP BY player_name, season
+     )
+
+         SELECT COALESCE(t.player_name, y.player_name)                    as player_name,
+                COALESCE(y.first_active_season, t.current_season)       AS first_active_season,
+                COALESCE(t.current_season, y.last_active_season)        AS last_active_season,
+                CASE
+                    WHEN y.player_name IS NULL THEN 'New'
+                    WHEN y.last_active_season = t.current_season - 1 THEN 'Continued Playing'
+                    WHEN y.last_active_season < t.current_season - 1 THEN 'Returned from Retirement'
+                    WHEN t.player_name IS NULL AND y.last_active_season = y.current_season THEN 'Retired'
+                    ELSE 'Stayed Retired'
+                    END                                           as season_state,
+                COALESCE(y.seasons_active,
+                         ARRAY []::INTEGER[])
+                    || CASE
+                           WHEN
+                               t.player_name IS NOT NULL
+                               THEN ARRAY [t.current_season]
+                           ELSE ARRAY []::INTEGER[]
+                    END                                           AS seasons_active,
+                COALESCE(t.current_season, y.current_season + 1) as current_season
+         FROM today t
+                  FULL OUTER JOIN yesterday y
+                                  ON t.player_name = y.player_name
